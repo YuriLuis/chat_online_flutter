@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-void main(){
+void main()async{
   runApp(MyApp());
 
-
-
-
+  QuerySnapshot snapshot = await Firestore.instance.collection('mensagens').getDocuments();
+  snapshot.documents.forEach((d) {
+    print(d.data);
+  });
   /**
    *
    * Para escrever os dados no banco de dados.
@@ -15,7 +16,8 @@ void main(){
    *
   Firestore.instance.collection('mensagens').document().collection('arquivos')
       .document().setData({
-    'nome_arquivo' : "foto.jpg"
+    'from' : 'Yuri',
+      'texto' : 'Tudo Bem?'
   });
    */
 }
