@@ -17,6 +17,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   Map<String, dynamic> data = {};
   FirebaseUser _currentUser;
+  bool isLoading = false;
 
   final GoogleSignIn googleSignIn = GoogleSignIn();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -26,7 +27,10 @@ class _ChatScreenState extends State<ChatScreen> {
     // TODO: implement initState
     super.initState();
     FirebaseAuth.instance.onAuthStateChanged.listen((user) {
-      _currentUser = user;
+      setState(() {
+        _currentUser = user;
+      });
+
     });
   }
 
@@ -62,13 +66,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (user == null) {
       _scaffoldKey.currentState.showSnackBar(SnackBar(
           content: Text("Não foi possível fazer o login. Tente novamente"),
-      backgroundColor: Colors.red));
+          backgroundColor: Colors.red));
     }
 
-    Map<String ,dynamic> data = {
-      "uid" : user.uid,
-      "senderName" : user.displayName,
-      "senderPhotoUrl" : user.photoUrl
+    Map<String, dynamic> data = {
+      "uid": user.uid,
+      "senderName": user.displayName,
+      "senderPhotoUrl": user.photoUrl,
+      'time' : Timestamp.now()
     };
 
     if (imgFile != null) {
@@ -76,10 +81,15 @@ class _ChatScreenState extends State<ChatScreen> {
           .ref()
           .child(DateTime.now().microsecondsSinceEpoch.toString())
           .putFile(imgFile);
-
+      setState(() {
+        isLoading = true;
+      });
       StorageTaskSnapshot taskSnapshot = await task.onComplete;
       String url = await taskSnapshot.ref.getDownloadURL();
       data['imgUrl'] = url;
+      setState(() {
+        isLoading = false;
+      });
     }
     if (text != null) {
       data['text'] = text;
@@ -91,15 +101,41 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
         key: _scaffoldKey,
-        appBar: AppBar(
-          title: Text("Olá"),
-          elevation: 0,
-        ),
-        body: Column(
-          children: [
-            Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-              stream: Firestore.instance.collection('messages').snapshots(),
+        appBar: _appBar(),
+        body: _body());
+  }
+
+  Widget _appBar(){
+    return AppBar(
+      centerTitle: true,
+      title: Text(_currentUser != null
+          ? 'Olá, ${_currentUser.displayName}'
+          : 'Chat App'),
+      elevation: 0,
+      actions: [
+        _currentUser != null
+            ? IconButton(
+          icon: Icon(Icons.exit_to_app),
+          onPressed: () {
+            FirebaseAuth.instance.signOut();
+            googleSignIn.signOut();
+            _scaffoldKey.currentState.showSnackBar(SnackBar(
+              content: Text("Você saiu com sucesso!"),));
+          },
+        )
+            : Container(
+
+        )
+      ],
+    );
+  }
+
+  Widget _body(){
+    return Column(
+      children: [
+        Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: Firestore.instance.collection('messages').orderBy('time').snapshots(),
               builder: (context, snapshot) {
                 switch (snapshot.connectionState) {
                   case ConnectionState.none:
@@ -109,21 +145,24 @@ class _ChatScreenState extends State<ChatScreen> {
                     );
                   default:
                     List<DocumentSnapshot> documents =
-                        snapshot.data.documents.reversed.toList();
+                    snapshot.data.documents.reversed.toList();
 
                     return ListView.builder(
                       itemCount: documents.length,
                       reverse: true,
                       itemBuilder: (context, index) {
-                        return ChatMessage(documents[index].data, true);
+                        return ChatMessage(documents[index].data,
+                            documents[index].data['uid'] == _currentUser?.uid
+                            );
                       },
                     );
                 }
               },
             )),
-            TextComposer(_sendMessage //chama metodo que grava no banco.
-                )
-          ],
-        ));
+        isLoading ? LinearProgressIndicator() : Container(),
+        TextComposer(_sendMessage //chama metodo que grava no banco.
+        )
+      ],
+    );
   }
 }
